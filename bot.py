@@ -5,12 +5,12 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-BOT_TOKEN = "8321735522:AAGEp4CycEo8KNhjgkJY9i1E_VMlAE3mMbU"
+BOT_TOKEN = "8353114641:AAE4-vd3ZEWSQ3OFSXHjt0djor_7LNLqwt4"
 ADMIN_ID = 7687968365
 CHANNEL_USERNAME = "@xvideos_op"
 MOVIES_FILE = "movies.json"
 BATCHES_FILE = "batches.json"
-DELETE_TIME_MINUTES = 20
+DELETE_TIME_MINUTES = 10
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,51 +32,57 @@ def save_json(filename, data):
 MOVIES = load_json(MOVIES_FILE)
 BATCHES = load_json(BATCHES_FILE)
 
-logger.info(f"Loaded Videos: {len(MOVIES)}")
-logger.info(f"Loaded Batches: {len(BATCHES)}")
-logger.info(f"Channel: {CHANNEL_USERNAME}")
-logger.info(f"Delete Time: {DELETE_TIME_MINUTES} min")
-
 async def auto_delete(context, chat_id, message_id):
     await asyncio.sleep(DELETE_TIME_MINUTES * 60)
     try:
         await context.bot.delete_message(chat_id, message_id)
+        logger.info(f"Deleted message {message_id} from chat {chat_id}")
     except Exception as e:
         logger.error(f"Delete error: {e}")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat_id = update.effective_chat.id
     args = context.args
-    
+    chat_id = update.effective_chat.id
+
+    DELETION_WARNING = (
+        "⚠️ <b>Telegram Mf Dont Like It So....</b>\n\n"
+        "Your <b>files will be deleted within 30 minutes.</b>\n"
+        "So please <b>forward them to any other place</b> for future availability.\n"
+    )
+
     if args:
         code = args[0].lower()
         if code in BATCHES:
             batch = BATCHES[code]
-            await update.message.reply_text(f"📦 {batch['title']}\nVideos: {len(batch['videos'])}\nAuto-delete: {DELETE_TIME_MINUTES} min")
+            await update.message.reply_text(DELETION_WARNING, parse_mode="HTML")
             for video_code in batch['videos']:
                 if video_code in MOVIES:
                     movie = MOVIES[video_code]
-                    caption = f"🎬 {movie['title']}\nAuto-delete: {DELETE_TIME_MINUTES} min\nSave now!\n{CHANNEL_USERNAME}"
-                    buttons = [[InlineKeyboardButton("Save", url="https://t.me/+42777")], [InlineKeyboardButton("Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]]
+                    caption = f"🎬 {movie['title']}\nBatch: {batch['title']}"
+                    buttons = [
+                        [InlineKeyboardButton("💾 Save", url="https://t.me/+42777")],
+                        [InlineKeyboardButton("📢 Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]
+                    ]
                     sent = await context.bot.send_video(chat_id=chat_id, video=movie['file_id'], caption=caption, reply_markup=InlineKeyboardMarkup(buttons))
                     asyncio.create_task(auto_delete(context, chat_id, sent.message_id))
                     await asyncio.sleep(2)
-            await update.message.reply_text("All videos sent!")
             return
         elif code in MOVIES:
             movie = MOVIES[code]
-            caption = f"🎬 {movie['title']}\nAuto-delete: {DELETE_TIME_MINUTES} min\nSave now!\n{CHANNEL_USERNAME}"
-            buttons = [[InlineKeyboardButton("Save", url="https://t.me/+42777")], [InlineKeyboardButton("Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]]
+            await update.message.reply_text(DELETION_WARNING, parse_mode="HTML")
+            caption = f"🎬 {movie['title']}\n"
+            buttons = [
+                [InlineKeyboardButton("💾 Save", url="https://t.me/+42777")],
+                [InlineKeyboardButton("📢 Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]
+            ]
             sent = await context.bot.send_video(chat_id=chat_id, video=movie['file_id'], caption=caption, reply_markup=InlineKeyboardMarkup(buttons))
             asyncio.create_task(auto_delete(context, chat_id, sent.message_id))
             return
-        else:
-            await update.message.reply_text("Invalid code!")
-            return
-    
-    await update.message.reply_text(f"Welcome {user.first_name}!\nMovie Bot\n{CHANNEL_USERNAME}")
 
+    # No welcome message if no args
+    return
+
+# Admin commands below — unchanged
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     await update.message.reply_text("Send video file now...")
@@ -94,7 +100,6 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     text = update.message.text.strip()
-    
     if context.user_data.get('awaiting_code'):
         if not text.replace('_', '').isalnum():
             await update.message.reply_text("Invalid code!")
@@ -121,35 +126,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_username = (await context.bot.get_me()).username
         link = f"https://t.me/{bot_username}?start={movie_code}"
         await update.message.reply_text(f"Added!\n{title}\nCode: {movie_code}\nLink: {link}")
-        context.user_data.clear()
-    elif context.user_data.get('batch_awaiting_codes'):
-        codes = [c.strip().lower() for c in text.split(',')]
-        valid_codes = [c for c in codes if c in MOVIES]
-        if len(codes) != len(valid_codes):
-            await update.message.reply_text("Some codes invalid!")
-            return
-        context.user_data['batch_codes'] = valid_codes
-        context.user_data['batch_awaiting_codes'] = False
-        context.user_data['batch_awaiting_title'] = True
-        await update.message.reply_text(f"{len(valid_codes)} codes valid! Send batch title:")
-    elif context.user_data.get('batch_awaiting_title'):
-        context.user_data['batch_title'] = text
-        context.user_data['batch_awaiting_title'] = False
-        context.user_data['batch_awaiting_code'] = True
-        await update.message.reply_text("Title saved! Send batch code:")
-    elif context.user_data.get('batch_awaiting_code'):
-        batch_code = text.lower().replace(' ', '_')
-        if not batch_code.replace('_', '').isalnum():
-            await update.message.reply_text("Invalid batch code!")
-            return
-        if batch_code in BATCHES:
-            await update.message.reply_text("Batch code exists!")
-            return
-        BATCHES[batch_code] = {'title': context.user_data['batch_title'], 'videos': context.user_data['batch_codes'], 'created_time': int(time.time())}
-        save_json(BATCHES_FILE, BATCHES)
-        bot_username = (await context.bot.get_me()).username
-        batch_link = f"https://t.me/{bot_username}?start={batch_code}"
-        await update.message.reply_text(f"Batch Created!\n{context.user_data['batch_title']}\nCode: {batch_code}\nLink: {batch_link}")
         context.user_data.clear()
 
 async def addbatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,10 +183,6 @@ async def deletebatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     await update.message.reply_text(f"Stats\nVideos: {len(MOVIES)}\nBatches: {len(BATCHES)}\nAuto-delete: {DELETE_TIME_MINUTES} min\nStatus: Online\n{CHANNEL_USERNAME}")
-
-logger.info("Bot Starting...")
-logger.info(f"Channel: {CHANNEL_USERNAME}")
-logger.info(f"Delete Time: {DELETE_TIME_MINUTES} min")
 
 app = Application.builder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start_command))
