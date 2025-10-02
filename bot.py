@@ -3,12 +3,8 @@ import logging
 import time
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    ContextTypes, filters
-)
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-# ========== CONFIGURATION ==========
 BOT_TOKEN = "8321735522:AAGEp4CycEo8KNhjgkJY9i1E_VMlAE3mMbU"
 ADMIN_ID = 7687968365
 CHANNEL_USERNAME = "@xvideos_op"
@@ -22,8 +18,7 @@ def load_json(filename):
     try:
         with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
-    except:
-        return {}
+    except: return {}
 
 def save_json(filename, data):
     try:
@@ -35,89 +30,54 @@ def save_json(filename, data):
 MOVIES = load_json(MOVIES_FILE)
 BATCHES = load_json(BATCHES_FILE)
 
-# ========== AUTO DELETE FUNCTION ==========
 async def auto_delete(context, chat_id, message_id):
     await asyncio.sleep(DELETE_TIME_MINUTES * 60)
     try:
         await context.bot.delete_message(chat_id, message_id)
     except Exception as e:
-        logging.error(f"Delete message error: {e}")
+        logging.error(f"Delete error: {e}")
 
-# ========== START COMMAND ==========
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
     args = context.args
-
     if args:
         code = args[0].lower()
         if code in BATCHES:
             batch = BATCHES[code]
             await update.message.reply_text(
-                f"📦 {batch['title']}\nTotal Videos: {len(batch['videos'])}\n⏰ Auto-delete: {DELETE_TIME_MINUTES} min"
-            )
-            # Send all videos in batch
+                f"📦 {batch['title']}\nVideos: {len(batch['videos'])}\nAuto-delete {DELETE_TIME_MINUTES} min.\nSending...")
             for video_code in batch['videos']:
                 if video_code in MOVIES:
                     movie = MOVIES[video_code]
-                    caption = (
-                        f"🎬 {movie['title']}\n"
-                        f"📦 {batch['title']}\n"
-                        f"⚠️ Auto-delete: {DELETE_TIME_MINUTES} min\n"
-                        f"Save quickly!\n"
-                        f"{CHANNEL_USERNAME}"
-                    )
-                    buttons = [
+                    caption = f"🎬 {movie['title']}\nAuto-delete {DELETE_TIME_MINUTES} min.\nSave quickly!\n{CHANNEL_USERNAME}"
+                    reply_markup = InlineKeyboardMarkup([
                         [InlineKeyboardButton("💾 Save", url="https://t.me/+42777")],
                         [InlineKeyboardButton("📢 Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]
-                    ]
-                    sent = await context.bot.send_video(
-                        chat_id=chat_id,
-                        video=movie['file_id'],
-                        caption=caption,
-                        reply_markup=InlineKeyboardMarkup(buttons)
-                    )
+                    ])
+                    sent = await context.bot.send_video(chat_id=chat_id, video=movie['file_id'], caption=caption, reply_markup=reply_markup)
                     asyncio.create_task(auto_delete(context, chat_id, sent.message_id))
                     await asyncio.sleep(2)
-            await update.message.reply_text(f"✅ All videos sent! Auto-delete in {DELETE_TIME_MINUTES} min.")
+            await update.message.reply_text(f"✅ All videos sent, auto-deleting soon!")
             return
         elif code in MOVIES:
             movie = MOVIES[code]
-            caption = (
-                f"🎬 {movie['title']}\n"
-                f"⚠️ Auto-delete: {DELETE_TIME_MINUTES} min\n"
-                f"Save now!\n"
-                f"{CHANNEL_USERNAME}"
-            )
-            buttons = [
+            caption = f"🎬 {movie['title']}\nAuto-delete {DELETE_TIME_MINUTES} min.\nSave now!\n{CHANNEL_USERNAME}"
+            reply_markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("💾 Save", url="https://t.me/+42777")],
                 [InlineKeyboardButton("📢 Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]
-            ]
-            sent = await context.bot.send_video(
-                chat_id=chat_id,
-                video=movie['file_id'],
-                caption=caption,
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
+            ])
+            sent = await context.bot.send_video(chat_id=chat_id, video=movie['file_id'], caption=caption, reply_markup=reply_markup)
             asyncio.create_task(auto_delete(context, chat_id, sent.message_id))
             return
         else:
             await update.message.reply_text("❌ Invalid code!")
-            return
-
-    await update.message.reply_text(
-        f"👋 Welcome {user.first_name}!\n"
-        f"🎬 Movie/Video Bot\n"
-        f"• Single/batch links\n"
-        f"• Auto-delete: {DELETE_TIME_MINUTES} min\n"
-        f"📢 {CHANNEL_USERNAME}"
-    )
-
-# ========== ADMIN HANDLERS ==========
+    else:
+        await update.message.reply_text(f"👋 Welcome {user.first_name}!\nMovie bot 📢 {CHANNEL_USERNAME}")
 
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
-    await update.message.reply_text("📤 Add Video\nSend video file now...")
+    await update.message.reply_text("Send video file now...")
     context.user_data['adding_movie'] = True
 
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,27 +87,27 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['temp_file_id'] = video.file_id
         context.user_data['adding_movie'] = False
         context.user_data['awaiting_code'] = True
-        await update.message.reply_text("✅ Video received!\nSend code (movie001, movie002):")
+        await update.message.reply_text("Received video!\nSend code:")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     text = update.message.text.strip()
     if context.user_data.get('awaiting_code'):
         if not text.replace('_', '').isalnum():
-            await update.message.reply_text("❌ Invalid code! A-Z 0-9 _ allowed.")
+            await update.message.reply_text("Invalid code!")
             return
         if text.lower() in MOVIES:
-            await update.message.reply_text("❌ Code already exists!")
+            await update.message.reply_text(f"Code exists!")
             return
         context.user_data['movie_code'] = text.lower()
         context.user_data['awaiting_code'] = False
         context.user_data['awaiting_title'] = True
-        await update.message.reply_text("✅ Code saved!\nSend title:")
+        await update.message.reply_text(f"Code: {text}\nSend title:")
     elif context.user_data.get('awaiting_title'):
         context.user_data['movie_title'] = text
         context.user_data['awaiting_title'] = False
         context.user_data['awaiting_description'] = True
-        await update.message.reply_text("✅ Title saved!\nSend description (or type 'skip'):")
+        await update.message.reply_text("Title saved!\nSend description (or skip):")
     elif context.user_data.get('awaiting_description'):
         description = "" if text.lower() == 'skip' else text
         movie_code = context.user_data['movie_code']
@@ -162,33 +122,31 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_json(MOVIES_FILE, MOVIES)
         bot_username = (await context.bot.get_me()).username
         link = f"https://t.me/{bot_username}?start={movie_code}"
-        await update.message.reply_text(
-            f"✅ Added!\n🎬 {title}\nCode: `{movie_code}`\nShare Link: `{link}`"
-        )
+        await update.message.reply_text(f"Added!\n🎬 {title}\nCode: `{movie_code}`\nLink: `{link}`")
         context.user_data.clear()
     elif context.user_data.get('batch_awaiting_codes'):
         codes = [c.strip().lower() for c in text.split(',')]
         valid_codes = [c for c in codes if c in MOVIES]
         invalid_codes = [c for c in codes if c not in MOVIES]
         if invalid_codes:
-            await update.message.reply_text(f"❌ Invalid codes: {', '.join(invalid_codes)}")
+            await update.message.reply_text(f"Invalid codes: {', '.join(invalid_codes)}")
             return
         context.user_data['batch_codes'] = valid_codes
         context.user_data['batch_awaiting_codes'] = False
         context.user_data['batch_awaiting_title'] = True
-        await update.message.reply_text(f"✅ Codes selected!\nSend batch title:")
+        await update.message.reply_text(f"{len(valid_codes)} videos selected!\nSend batch title:")
     elif context.user_data.get('batch_awaiting_title'):
         context.user_data['batch_title'] = text
         context.user_data['batch_awaiting_title'] = False
         context.user_data['batch_awaiting_code'] = True
-        await update.message.reply_text("✅ Title saved!\nSend batch code:")
+        await update.message.reply_text("Title saved! Send batch code:")
     elif context.user_data.get('batch_awaiting_code'):
         batch_code = text.lower().replace(' ', '_')
         if not batch_code.replace('_', '').isalnum():
-            await update.message.reply_text("❌ Invalid batch code!")
+            await update.message.reply_text("Batch code invalid!")
             return
         if batch_code in BATCHES:
-            await update.message.reply_text("❌ Batch code already exists!")
+            await update.message.reply_text("Batch code exists!")
             return
         BATCHES[batch_code] = {
             'title': context.user_data['batch_title'],
@@ -199,16 +157,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_username = (await context.bot.get_me()).username
         batch_link = f"https://t.me/{bot_username}?start={batch_code}"
         await update.message.reply_text(
-            f"✅ Batch Created!\n📦 {context.user_data['batch_title']}\nCode: `{batch_code}`\nVideos: {len(context.user_data['batch_codes'])}\nBatch Link: `{batch_link}`"
+            f"Batch Created!\n📦 {context.user_data['batch_title']}\nBatch code: `{batch_code}`\nLink: `{batch_link}`"
         )
         context.user_data.clear()
 
 async def addbatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     if not MOVIES:
-        await update.message.reply_text("❌ First add videos with /add")
+        await update.message.reply_text("No videos yet!")
         return
-    await update.message.reply_text("📦 Create Batch\nSend video codes (comma separated):\nExample: movie001, movie002\nUse /list for codes")
+    await update.message.reply_text("Create Batch. Send video codes (comma-separated).\nExample: movie001, movie002")
     context.user_data['batch_awaiting_codes'] = True
 
 async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -243,9 +201,9 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = MOVIES[code]['title']
         del MOVIES[code]
         save_json(MOVIES_FILE, MOVIES)
-        await update.message.reply_text(f"✅ Deleted: {title}")
+        await update.message.reply_text(f"Deleted: {title}")
     else:
-        await update.message.reply_text("❌ Not found!")
+        await update.message.reply_text("Not found!")
 
 async def deletebatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
@@ -257,17 +215,15 @@ async def deletebatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         title = BATCHES[code]['title']
         del BATCHES[code]
         save_json(BATCHES_FILE, BATCHES)
-        await update.message.reply_text(f"✅ Deleted batch: {title}")
+        await update.message.reply_text(f"Deleted batch: {title}")
     else:
-        await update.message.reply_text("❌ Batch not found!")
+        await update.message.reply_text("Batch not found!")
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     await update.message.reply_text(
         f"📊 Stats\nVideos: {len(MOVIES)}\nBatches: {len(BATCHES)}\nAuto-delete: {DELETE_TIME_MINUTES} min\nStatus: Online\nChannel: {CHANNEL_USERNAME}"
     )
-
-# ========== APP & HANDLERS ==========
 
 app = Application.builder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start_command))
